@@ -8496,7 +8496,12 @@ ui.renderMap = function () {
     x.strokeStyle = '#0a0812'; x.lineWidth = 5; x.beginPath(); x.arc(hx, hy, 11, 0, 7); x.stroke();
     x.strokeStyle = '#fff8e0'; x.lineWidth = 2.5; x.beginPath(); x.arc(hx, hy, 11, 0, 7); x.stroke();
     x.fillStyle = '#0a0812'; x.beginPath(); x.arc(hx, hy, 6, 0, 7); x.fill(); x.fillStyle = '#ff5a30'; x.beginPath(); x.arc(hx, hy, 4, 0, 7); x.fill();
-    x.font = 'bold 13px monospace'; x.textAlign = 'center'; x.lineWidth = 4; x.strokeStyle = '#0a0812'; x.strokeText('Toi', hx, hy - 16); x.fillStyle = '#fff8e0'; x.fillText('Toi', hx, hy - 16);
+    // les pierres des fées restent toujours visibles par-dessus (le marqueur ne doit pas les cacher)
+    const night = m.id === 'nuit', stones = (night ? G.MAPS.nuit : ow).meta.stones || [], known = night ? (S.nstones || []) : S.stones;
+    let ly = hy - 16;
+    for (const st of stones) { if (!known.includes(st.name)) continue; const X = st.x * sc, Y = st.y * sc; if (Math.abs(X - hx) < 26 && Y < hy && Y > hy - 30) ly = hy + 24; }
+    for (const st of stones) { if (!known.includes(st.name)) continue; const X = st.x * sc, Y = st.y * sc; x.fillStyle = night ? '#0a0812' : '#1a1216'; x.beginPath(); x.arc(X, Y, 7, 0, 7); x.fill(); x.fillStyle = night ? (S.q.dames ? '#c890ff' : '#6a5a8a') : (S.q.dames ? '#60ffa0' : '#5a8a6a'); x.beginPath(); x.arc(X, Y, 5, 0, 7); x.fill(); }
+    x.font = 'bold 13px monospace'; x.textAlign = 'center'; x.lineWidth = 4; x.strokeStyle = '#0a0812'; x.strokeText('Toi', hx, ly); x.fillStyle = '#fff8e0'; x.fillText('Toi', hx, ly);
     const wrap = cv.parentElement;
     requestAnimationFrame(() => { const k = cv.clientWidth / cv.width; wrap.scrollTop = Math.max(0, hy * k - wrap.clientHeight / 2); wrap.scrollLeft = Math.max(0, hx * k - wrap.clientWidth / 2); });
   }
