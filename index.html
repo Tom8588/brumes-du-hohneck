@@ -106,7 +106,7 @@ body.mini #hud, body.mini #banner { display: none !important; }
 #menu .panel { max-height: calc(100dvh - 20px); grid-template-rows: auto minmax(0, 1fr); }
 #menu .panel > div:nth-child(2) { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 #menu .tabs { align-items: center; }
-#menu .tabs #mResume { margin-left: auto; padding: 6px 16px; font-size: 15px; }
+#menu .tabs #mResume { order: -1; margin-right: 14px; padding: 6px 16px; font-size: 15px; }
 
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .tabs button { background: #fff8e4; border: 2px solid #b89a68; border-radius: 6px 6px 0 0; padding: 6px 14px; font-size: 15px; font-weight: 600; color: var(--encre); }
@@ -8070,7 +8070,7 @@ const ui = G.ui = {
     $('rotateOk').addEventListener('click', () => { game.ignoreRotate = true; $('rotate').hidden = true; });
     // menu
     for (const b of document.querySelectorAll('[data-tab]')) b.addEventListener('click', () => this.tab(b.dataset.tab));
-    $('mResume').addEventListener('click', () => this.closeMenu());
+    $('mResume').addEventListener('click', () => { if (performance.now() - (this.menuT || 0) > 450) this.closeMenu(); });
     $('mSave').addEventListener('click', () => G.save());
     $('mSound').addEventListener('click', () => this.toggleSound());
     $('mInstall').addEventListener('click', () => this.showInstall());
@@ -8183,7 +8183,7 @@ const ui = G.ui = {
   },
 
   /* --- menu --- */
-  openMenu() { game.state = 'menu'; G.audio.sfx('menu'); $('menu').hidden = false; this.tab(this.curTab || 'sac'); },
+  openMenu() { this.menuT = performance.now(); game.state = 'menu'; G.audio.sfx('menu'); $('menu').hidden = false; this.tab(this.curTab || 'sac'); },
   closeMenu() { $('menu').hidden = true; if (game.state === 'menu') game.state = 'play'; G.input._menu = false; },
   tab(name) {
     this.curTab = name;
