@@ -2724,7 +2724,14 @@ const buildOverworld = () => {
   let dx = 100; while (dx < 118 && !G.isWater(m.get(dx, 16))) dx++;
   m.npcs.push({ id: 'dame', x: dx + 0.5, y: 15.5, sprite: 'dame', float: 1 });
   // le dahu tourne autour de sa butte
-  m.meta.dahu = { cx: 12, cy: 66, r: 3.2 };
+  m.meta.dahu = { cx: 12, cy: 66.5, rx: 4.75, ry: 4 };
+  { // son sentier au pied de la butte : rien ne doit le bloquer
+    const d = m.meta.dahu;
+    for (let a = 0; a < 6.3; a += 0.03) {
+      const px = d.cx * T + 8 + Math.cos(a) * d.rx * T, py = d.cy * T + 8 + Math.sin(a) * d.ry * T;
+      for (const [ox, oy] of [[-6, -4], [6, -4], [-6, 4], [6, 4]]) { const tx = Math.floor((px + ox) / T), ty = Math.floor((py + oy) / T); if (m.solidAt(tx, ty)) { m.set(tx, ty, TL.GRASS); m.setO(tx, ty, 0); if (m.cl) m.cl[ty * m.w + tx] = 0; } }
+    }
+  }
   // 14. ennemis par région (difficulté croissante)
   m.spawns.push(
     // A
@@ -3450,24 +3457,32 @@ G.NPC = class {
 
 /* ---------- le dahu (quête) ---------- */
 G.Dahu = class {
-  constructor(cx, cy, r) { Object.assign(this, { cx: cx * T + 8, cy: cy * T + 8, r: r * T, a: 0, x: 0, y: 0, hw: 6, hh: 5, t: 0, spd: 0.55, isNpc: true, id: 'dahu', dir: 3 }); this.place(); }
-  place() { this.x = this.cx + Math.cos(this.a) * this.r; this.y = this.cy + Math.sin(this.a) * this.r * 0.8; }
+  constructor(cx, cy, rx, ry) { Object.assign(this, { cx: cx * T + 8, cy: cy * T + 8, rx: rx * T, ry: (ry || rx * 0.8) * T, a: Math.random() * 6.28, x: 0, y: 0, z: 0, hw: 6, hh: 5, t: 0, isNpc: true, id: 'dahu', dir: 3, flee: 0, tired: 0, hop: 0, wary: 0 }); this.place(); }
+  place() { this.x = this.cx + Math.cos(this.a) * this.rx; this.y = this.cy + Math.sin(this.a) * this.ry; }
   update(dt, g) {
     this.t += dt;
-    const h = g.hero, vx = -Math.sin(this.a), vy = Math.cos(this.a) * 0.8; // sens de rotation imposé par ses pattes
+    const h = g.hero, tx = -Math.sin(this.a) * this.rx, ty = Math.cos(this.a) * this.ry, tl = Math.hypot(tx, ty) || 1; // il ne tourne que dans un sens
     const dx = h.x - this.x, dy = h.y - this.y, d = Math.hypot(dx, dy);
-    const ahead = (dx * vx + dy * vy) > 0;
-    let spd = this.spd;
-    if (d < 50 && !ahead) spd = 1.5; // il détale si on l'approche par derrière
-    this.a += spd * dt; this.place();
-    this.dir = vx > 0 ? 3 : 2;
-    if (d < 14 && ahead && !g.S.q.dahu) g.catchDahu(this);
+    const ahead = (dx * tx + dy * ty) > 0;
+    this.flee = Math.max(0, this.flee - dt); this.tired = Math.max(0, this.tired - dt); this.wary = Math.max(0, this.wary - dt);
+    // il t'entend arriver par derrière : il détale, puis s'essouffle
+    if (!ahead && d < 64 && !this.flee && !this.tired) this.flee = 2.8;
+    if (this.flee > 0 && this.flee - dt <= 0) this.tired = 1.1;
+    let v = this.tired > 0 ? 32 : this.flee > 0 ? 86 : 44;
+    // nez à nez : il ne sait pas faire demi-tour… alors il te saute par-dessus
+    if (ahead && d < 20 && this.hop <= 0) { this.hop = 0.55; this.wary = 1.6; this.flee = 2.8; this.tired = 0; v = 260; G.audio.sfx('throw'); if (!g._dahuHop) { g._dahuHop = 1; G.ui.toast('Le dahu t\'a sauté par-dessus ! Prends-le par derrière.'); } }
+    if (this.hop > 0) { this.hop -= dt; v = Math.max(v, 150); this.z = Math.sin(Math.max(0, this.hop) / 0.55 * Math.PI) * 14; } else this.z = 0;
+    this.a += v * dt / tl; this.place();
+    this.dir = tx > 0 ? 3 : 2;
+    // tout près, par derrière, Tom l'appelle (bouton A) : il se retourne et dégringole
+    if (!ahead && d < 22 && this.hop <= 0 && this.wary <= 0 && (h.state === 'swing' || h.state === 'spin') && !g.S.q.dahu) g.catchDahu(this);
   }
   face() {}
   draw(x) {
-    const s = G.CRE.dahu[this.dir];
-    x.fillStyle = 'rgba(14,18,30,0.28)'; x.beginPath(); x.ellipse(this.x, this.y + 3, 7, 2, 0, 0, 7); x.fill();
-    x.drawImage(s[Math.floor(this.t * 8) % 2], Math.round(this.x - 10), Math.round(this.y - 13));
+    const s = G.CRE.dahu[this.dir], fr = s[Math.floor(this.t * (this.flee > 0 ? 14 : 8)) % 2];
+    x.fillStyle = 'rgba(14,18,30,0.28)'; x.beginPath(); x.ellipse(Math.round(this.x), Math.round(this.y + 3), 7 - this.z * 0.15, 2, 0, 0, 7); x.fill();
+    x.drawImage(fr, Math.round(this.x - 10), Math.round(this.y - 13 - this.z));
+    if (this.tired > 0) { x.fillStyle = '#e8f0ff'; x.font = 'bold 7px monospace'; x.textAlign = 'center'; x.fillText('…', Math.round(this.x + (this.dir === 3 ? 8 : -8)), Math.round(this.y - 16)); }
   }
 };
 
@@ -4365,7 +4380,7 @@ G.QUESTS = () => {
   const q = G.S.q, out = [];
   if (q.cowsAsked) out.push({ title: 'Les vaches égarées', done: q.cowsDone, text: q.cowsDone ? 'Les trois vaches sont rentrées à la marcairerie.' : `Ramène les vaches perdues dans la brume à l'enclos de la marcairerie (${q.cows || 0}/3). Touche A près d'une vache pour qu'elle te suive.` });
   if (q.brimbAsked) out.push({ title: 'La tarte aux brimbelles', done: q.brimbDone, text: q.brimbDone ? 'L\'aubergiste a sa récolte de brimbelles.' : `Cueille des brimbelles sur les chaumes pour l'aubergiste (${q.brimb || 0}/8).` });
-  if (q.dahuAsked) out.push({ title: 'Le dahu', done: q.dahu, text: q.dahu ? 'Tu as attrapé le dahu ! Le chasseur n\'en revient pas.' : 'Attrape le dahu qui tourne autour de sa butte, près de la cabane du chasseur. Il ne tourne que dans un sens…' });
+  if (q.dahuAsked) out.push({ title: 'Le dahu', done: q.dahu, text: q.dahu ? 'Tu as attrapé le dahu ! Le chasseur n\'en revient pas.' : 'Attrape le dahu qui tourne autour de sa butte, près de la cabane du chasseur. Rattrape-le par derrière et appelle-le (A) quand tu es tout près.' });
   if (q.birdsAsked) out.push({ title: 'Hiltiti et Hiltoto', done: q.birds === 'done', text: q.birds === 'done' ? 'Les oiseaux jumeaux sont réunis.' : q.birds === 'rescued' ? 'Hiltoto est libre ! Retourne voir Hiltiti près du refuge.' : 'Hiltoto, le jumeau de Hiltiti, a été enlevé par la Méni Hennequin. Il serait enfermé dans une grotte près d\'une cascade.' });
   if (q.margotAsked) out.push({ title: 'Les bonbons de Margot', done: q.margot, text: q.margot ? 'Margot a retrouvé ses bonbons.' : `Le Sotré se cache quelque part sur le massif. Trouve-le (${q.sotre || 0}/3).` });
   if (q.damesAsked) out.push({ title: 'Les Dames vertes', done: q.dames, text: q.dames ? 'Les pierres des fées te transportent d\'un bout à l\'autre du massif (depuis la carte).' : 'Délivre la Vologne de l\'Ondine aux yeux verts, dans la grotte du Saut-des-Cuves.' });
@@ -4429,7 +4444,7 @@ G.npcTalk = (n, g) => {
       if (q.dahu && !q.dahuReward) { q.dahuReward = 1; return say(['Tu… tu l\'as attrapé ? Le dahu ? Le vrai ?', 'Soixante ans que j\'essaie ! Tiens, prends mon grand carquois, et ça aussi.'], { name: 'Le vieux chasseur', onEnd: () => g.giveMany(['carquois', 'heartp']) }); }
       if (q.dahuReward) return say('Quand je raconterai ça au village, personne ne me croira. Comme d\'habitude.', N('Le vieux chasseur'));
       q.dahuAsked = 1;
-      return say(['Tu crois au dahu, toi ? Moi oui. Il broute autour de la butte, juste au sud.', 'Ses pattes sont plus courtes d\'un côté : il ne peut tourner autour de la butte que dans un sens. Si tu le poursuis, il détale.', 'Le secret, c\'est de le prendre de face ! Ramène-le-moi et je te donne mon grand carquois.'], N('Le vieux chasseur'));
+      return say(['Tu crois au dahu, toi ? Moi oui. Il broute autour de la butte, juste au sud.', 'Ses pattes sont plus courtes d\'un côté : il ne peut tourner autour de la butte que dans un sens. Si tu le poursuis, il détale.', 'Le secret : rattrape-le par derrière, et quand tu es tout près, appelle-le (bouton A). Il se retournera pour voir… et avec ses pattes de travers, il dégringolera ! De face, n\'essaie même pas : il te sautera par-dessus. Ramène-le-moi et je te donne mon grand carquois.'], N('Le vieux chasseur'));
     }
     case 'dameverte': case 'dameverte2': {
       if (q.dames) return say(end ? 'Ce soir, nous danserons au Saut-des-Cuves en ton honneur. Ne t\'attarde pas trop tard, tout de même.' : 'Touche une pierre des fées et ouvre ta carte : nous te porterons au-dessus de la cascade, jusqu\'à n\'importe quelle autre pierre.', N('Les Dames vertes'));
@@ -4674,7 +4689,7 @@ const game = G.game = {
       this.npcs.push(new G.NPC({ id: 'sotre', x: sx, y: sy, sprite: 'sotre', when: 'sotreHide' }));
     }
     // le dahu
-    if (!q.dahu) { const d = m.meta.dahu; this.npcs.push(new G.Dahu(d.cx, d.cy, d.r)); }
+    if (!q.dahu) { const d = m.meta.dahu; this.npcs.push(new G.Dahu(d.cx, d.cy, d.rx || d.r, d.ry)); }
   },
   removeNpc(n) { G.puff(n.x, n.y - 10, 16, '#e8e4f0', 50); this.npcs = this.npcs.filter((q) => q !== n); },
   spawnEnemy(type, x, y, place) {
@@ -4913,7 +4928,7 @@ const game = G.game = {
     const q = G.S.q; q.dahu = 1; q.dahuAsked = 1;
     G.audio.sfx('secret');
     this.npcs = this.npcs.filter((n) => n !== d);
-    this.say(['Le dahu fonce droit sur toi… et se retrouve nez à nez avec tes chaussures de marche !', 'Il se laisse attraper, l\'air vexé. Le chasseur va être fou de joie.'], { onEnd: () => G.save(true) });
+    this.say(['« Hé, le dahu ! » Il tourne la tête pour voir qui l\'appelle… et ses pattes courtes se retrouvent du mauvais côté de la pente !', 'Il perd l\'équilibre, dégringole… et atterrit dans tes bras, l\'air vexé. Le chasseur va être fou de joie.'], { onEnd: () => G.save(true) });
   },
   checkCowHome(n) {
     const pen = this.map.meta.pen; if (!pen) return;
@@ -5581,7 +5596,7 @@ Object.assign(g0, {
     if (h.state !== 'swing') h.axeSwing = false;
     for (const n of this.npcs) if (n.leaving) { n.leaving -= dt; n.x += n.lvx * dt; n.y += n.lvy * dt; n.vx = n.lvx; n.vy = n.lvy; if (n.leaving <= 0) this.removeNpc(n); }
     for (const e of this.enemies) if (!e.dead && !e.isBoss && !e.d.inv && e.mode !== 'fly' && e.mode !== 'ghost' && e.mode !== 'water') this.unstick(e, e.mode);
-    for (const n of this.npcs) if (n.kind !== 'bird' && !n.float && n.hw) this.unstick(n);
+    for (const n of this.npcs) if (n.kind !== 'bird' && !n.float && n.hw && n.id !== 'dahu') this.unstick(n);
     // braseros minutés : s'éteignent si l'on traîne
     if (m.braT) for (const g in m.braT) if (m.braT[g] > 0) {
       const before = m.braT[g]; m.braT[g] -= dt;
