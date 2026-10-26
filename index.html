@@ -8692,6 +8692,30 @@ Object.defineProperty(G.SPR, 'hero', {
 });
 })();
 
+/* ===== les Dames vertes prêtent leurs ailes dès que l'Ondine est vaincue (on ne peut plus le rater) ===== */
+(() => {
+const g0 = G.game;
+const damesGift = (g) => {
+  const q = G.S.q; q.dames = 1; q.damesAsked = 1; G.audio.sfx('magic');
+  g.say(['Un chant clair monte de la cascade. Trois silhouettes vertes flottent au-dessus de l\'eau : les Dames vertes du Saut-des-Cuves !',
+    '« La Vologne chante à nouveau, randonneur. En remerciement, nous te prêtons nos ailes. »',
+    '« Ouvre ta carte et touche une pierre des fées que tu as déjà visitée : nous t\'y porterons. »'], { name: 'Les Dames vertes', onEnd: () => G.save(true) });
+};
+const origCheck = g0.checkBoss;
+g0.checkBoss = function () {
+  const D = G.DUNGEONS && G.DUNGEONS.cuves;
+  if (D && !D._dames) { D._dames = true; const prev = D.onBoss; D.onBoss = (g) => { const after = () => { if (!G.S.q.dames) damesGift(g); }; if (prev) { prev(g); after(); } else g.give('pierre', () => g.give('heartc', after)); }; }
+  return origCheck.apply(this, arguments);
+};
+// parties en cours : l'Ondine est déjà vaincue mais on n'est pas retourné voir les Dames
+const origLoad = g0.loadMap;
+g0.loadMap = function () {
+  const r = origLoad.apply(this, arguments), S = G.S;
+  if (S && S.flags && S.flags.boss_cuves && !S.q.dames) { S.q.dames = 1; S.q.damesAsked = 1; setTimeout(() => G.ui.toast('Les Dames vertes te prêtent leurs ailes : touche une pierre des fées sur ta carte pour voyager.'), 1500); }
+  return r;
+};
+})();
+
 </script>
 <script>
 (() => { const c = document.getElementById('instIcon'), x = c.getContext('2d'); x.fillStyle = '#16112a'; x.fillRect(0, 0, 16, 16); x.drawImage(G.ICONS.pierre, 0, 0); })();
