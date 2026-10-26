@@ -2689,7 +2689,7 @@ const buildOverworld = () => {
   sign(91, 67, 'Bivouac du Hohneck.|Altitude 1 300 m. Interdit de faire du feu. Recommandé de ne pas croiser la Méni Hennequin.');
   sign(106, 69, 'Refuge du Sotré.|Gardien : le Sotré. Horaires : quand ça lui chante.');
   sign(98, 54, 'Sommet du Hohneck — 1 363 m.|Par temps clair, on voit les Alpes. Aujourd\'hui, on voit… de la brume.');
-  sign(100, 84, '↓ Forêt du Moûtier des Fées et Roche du Diable|↑ Chaumes du Hohneck');
+  sign(102, 88, '↓ Forêt du Moûtier des Fées et Roche du Diable|↑ Chaumes du Hohneck');
   sign(74, 98, 'La Roche du Diable.|Un tunnel la traverse jusqu\'au lac de Longemer. On dit qu\'il y fait noir comme dans un four.');
   sign(39, 70, 'Gérardmer.|La Perle des Vosges. Boutique ouverte malgré la brume.');
   sign(32, 47, 'Le Pont des Fées.|Bâti par les fées sur la Vologne. Une ondine aux yeux verts y aurait entraîné un chasseur dans le torrent.');
@@ -8443,6 +8443,16 @@ ui.renderMap = function () {
     x.strokeStyle = '#1a1216'; x.lineWidth = 4; x.beginPath(); x.arc(X, Y, r, 0, 7); x.stroke();
     x.strokeStyle = col; x.lineWidth = 2; x.beginPath(); x.arc(X, Y, r, 0, 7); x.stroke();
     x.fillStyle = col; x.font = 'bold 14px monospace'; x.textAlign = 'center'; x.fillText('!', X, Y - r - 4);
+  }
+  // « Tu es ici » : un anneau bien visible autour de Tom, et la carte se centre sur lui
+  if (m.id === 'overworld' || m.id === 'nuit') {
+    const hx = G.game.hero.x / G.T * sc, hy = G.game.hero.y / G.T * sc;
+    x.strokeStyle = '#0a0812'; x.lineWidth = 5; x.beginPath(); x.arc(hx, hy, 11, 0, 7); x.stroke();
+    x.strokeStyle = '#fff8e0'; x.lineWidth = 2.5; x.beginPath(); x.arc(hx, hy, 11, 0, 7); x.stroke();
+    x.fillStyle = '#0a0812'; x.beginPath(); x.arc(hx, hy, 6, 0, 7); x.fill(); x.fillStyle = '#ff5a30'; x.beginPath(); x.arc(hx, hy, 4, 0, 7); x.fill();
+    x.font = 'bold 13px monospace'; x.textAlign = 'center'; x.lineWidth = 4; x.strokeStyle = '#0a0812'; x.strokeText('Toi', hx, hy - 16); x.fillStyle = '#fff8e0'; x.fillText('Toi', hx, hy - 16);
+    const wrap = cv.parentElement;
+    requestAnimationFrame(() => { const k = cv.clientWidth / cv.width; wrap.scrollTop = Math.max(0, hy * k - wrap.clientHeight / 2); wrap.scrollLeft = Math.max(0, hx * k - wrap.clientWidth / 2); });
   }
   if (marks.length) { const info = $('mapInfo'); info.textContent = 'Les cercles marquent les conseils du Chamois et les secrets qu\'on t\'a confiés. ' + info.textContent; }
 };
