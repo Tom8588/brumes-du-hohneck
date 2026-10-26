@@ -5955,7 +5955,7 @@ G.QUESTS = () => {
   const S = G.S, q = S.q, out = origQuests();
   if (S.trade > 0 || S.items.trade) { const steps = ['le marcaire (sabots)', 'l\'aubergiste (munster)', 'l\'ermite (kirsch)', 'la tisserande (plume)']; out.push({ title: 'De main en main', done: S.trade >= 4, text: S.trade >= 4 ? 'La tisserande t\'a tissé une grande bourse.' : `Porte l\'objet à ${steps[Math.min(3, S.trade)]}.` }); }
   if (q.pecheIntro) out.push({ title: 'La pêche au lac', done: !!q.pecheSecret, text: q.pecheSecret ? (q.charlemagne ? 'Tu as même sorti le brochet de Charlemagne !' : !S.flags.end ? 'Le pêcheur t\'a confié son secret. Le brochet de Charlemagne nage toujours… mais il ne mord pas tant que la brume couvre le lac.' : q.moto ? 'Le pêcheur en est sûr : ta moto a réveillé le brochet de Charlemagne. Continue de pêcher !' : 'La brume est levée : le brochet de Charlemagne finira bien par mordre. Il faudra de la patience…') : 'Ramène au pêcheur de Gérardmer un poisson de plus de dix kilos.' });
-  if (S.parts && S.parts.plan) out.push({ title: 'La schlitte', done: !!S.items.schlitte, text: S.items.schlitte ? (q.schlitteWon ? 'Tu as battu le vieux schlitteur à la course !' : 'Bats le vieux schlitteur : descends du Hohneck en moins de vingt secondes.') : 'Réunis les pièces de la schlitte et rapporte-les au vieux schlitteur.' });
+  if (S.parts && S.parts.plan) out.push({ title: 'La schlitte', done: !!S.items.schlitte, text: S.items.schlitte ? (q.schlitteWon ? 'Tu as battu le vieux schlitteur à la course !' : 'Bats le vieux schlitteur : descends du Hohneck en moins de vingt secondes.') : (q.schlitteBuild ? ((q.schlitteFish || 0) >= 3 ? 'Ta schlitte est prête ! Le vieux schlitteur t\'attend devant la scierie de la Vologne.' : `Le vieux schlitteur assemble ta schlitte. Pour patienter, pêche trois poissons au lac de Gérardmer (${q.schlitteFish || 0}/3).`) : 'Réunis les pièces de la schlitte et rapporte-les au vieux schlitteur.') });
   if (S.flags.end) out.push({ title: 'Le chant du Grand Tétras', done: !!S.flags.final, text: S.flags.final ? 'Le Grand Tétras a chanté. Le sabbat est rompu.' : `Retrouve les quatre Notes du Grand Tétras dans les Vosges de la nuit (${S.notes || 0}/4).` });
   return out;
 };
@@ -6115,7 +6115,9 @@ G.buildWorld = () => {
   for (let y = 31; y <= 33; y++) { ow.set(15, y, TL.PATH); ow.obj[idx(15, y)] = O.NONE; }
   const sci = interior('scierie', ['WWWWWWWWWWWWW', 'WWWWWWWWWWWWW', 'WbbS..H...bbW', 'W...........W', 'W..TTTTTT...W', 'W...........W', 'W.b.......b.W', 'WWWWWWdWWWWWW'], { name: 'Scierie de la Vologne' });
   exitWarp(sci, 6, 7, { to: 'overworld', x: 15.5, y: 31.6, dir: 0 });
-  sci.npcs.push({ id: 'schlitteur', x: 4.5, y: 3.5, sprite: 'schlitteur' });
+  sci.npcs.push({ id: 'schlitteur', x: 4.5, y: 3.5, sprite: 'schlitteur', when: 'schlitteInside' });
+  // quand la schlitte est prête, le schlitteur attend devant sa scierie, la schlitte à côté de lui
+  ow.npcs.push({ id: 'schlitteur', x: 16.6, y: 31.7, sprite: 'schlitteur', when: 'schlitteReady' }, { id: 'schlitteObj', x: 17.9, y: 31.9, sprite: 'schlitteObj', when: 'schlitteReady' });
   openDoor([15, 30], { to: 'scierie', x: 6.5, y: 6.4, dir: 1 });
   G.MAPS.tisserande = tis; G.MAPS.sabotier = sab; G.MAPS.scierie = sci;
   G.fixNpcSpots(ow);
@@ -6128,6 +6130,9 @@ g0.npcPresent = function (d) {
   const f = G.S.flags;
   if (d.when === 'chamoisB') return !f.metChamois;
   if (d.when === 'chamoisC') return !!f.metChamois;
+  const q = G.S.q, ready = !!q.schlitteBuild && (q.schlitteFish || 0) >= 3 && !G.S.items.schlitte;
+  if (d.when === 'schlitteReady') return ready && !this.map.night;
+  if (d.when === 'schlitteInside') return !ready;
   if (d.night && !this.map.night) return false;
   return origPresent.call(this, d);
 };
@@ -6260,6 +6265,11 @@ MINI.games.peche = {
     const lines = [`« ${f.name[0].toUpperCase() + f.name.slice(1)} de ${kg(f.w)} ! ${f.w > 8 ? 'Quelle bête !' : f.w > 3 ? 'Joli !' : 'Bon, c\'est un début.'} Je te le rachète ${pay} deniers. »`];
     S.coins = Math.min(S.wallet || 200, S.coins + pay);
     let after = null;
+    if (q.schlitteBuild && !S.items.schlitte && (q.schlitteFish || 0) < 3) {
+      q.schlitteFish = (q.schlitteFish || 0) + 1;
+      if (q.schlitteFish >= 3) lines.push('Au loin, du côté de la scierie de la Vologne, les coups de maillet se sont tus… Ta schlitte doit être prête !');
+      else G.ui.toast(`Patience… encore ${3 - q.schlitteFish} poisson${3 - q.schlitteFish > 1 ? 's' : ''} pour ta schlitte.`);
+    }
     if (f.w >= 10 && !q.pecheSecret) { q.pecheSecret = 1; lines.push('« Plus de dix kilos… Tu as gagné mon secret. »', '« À l\'est du lac de Longemer, près du tunnel de la Roche du Diable, un rocher fendu cache un passage dans la forêt. Un pétard, et tu verras. Je te l\'ai marqué sur ta carte. »'); }
     if (f.legend && !q.charlemagne) { q.charlemagne = 1; lines.push('« Le… le brochet de Charlemagne ! Avec l\'anneau de l\'empereur ! »', '« Garde l\'anneau, moi je ne m\'en remettrai pas. On dit qu\'il porte bonheur… et un peu plus. »'); after = () => gm.give('anneau', () => gm.give('heartp')); }
     MINI.end(lines, { name: 'Le pêcheur', onEnd: after });
@@ -6573,7 +6583,14 @@ G.schlitteurTalk = (n, g) => {
   }
   const miss = [['patins', 'les patins en hêtre'], ['traverses', 'les traverses'], ['cornes', 'deux cornes bien solides pour les mancherons'], ['corde', 'une corde de frein']].filter(([k]) => !P[k]);
   if (!miss.length) {
-    return g.say(['Tout y est ! Patins, traverses, cornes, corde… Donne-moi ça.', 'Toc, toc, toc… Et voilà ! Une schlitte comme on n\'en fait plus.'], { ...N, onEnd: () => g.give('schlitte') });
+    const q = S.q;
+    if (!q.schlitteBuild) return g.say(['Tout y est ! Patins, traverses, cornes, corde… Donne-moi ça.', 'Mais une schlitte, ça ne s\'assemble pas en deux coups de maillet. Il faut ajuster les patins, cheviller les traverses, nouer la corde de frein…', 'Va donc pêcher au lac de Gérardmer pour patienter. Trois poissons, et quand tu reviendras, elle sera prête.'], { ...N, onEnd: () => { q.schlitteBuild = 1; q.schlitteFish = q.schlitteFish || 0; G.save(true); } });
+    if ((q.schlitteFish || 0) < 3) return g.say([`Déjà là ? Elle n\'est pas prête, ta schlitte ! Toc, toc, toc…`, `Retourne pêcher au lac, et ne reviens pas avant trois poissons. (${q.schlitteFish || 0}/3)`], N);
+    return g.say(['Ah, te voilà ! Regarde-moi ça : une schlitte comme on n\'en fait plus. Les patins en hêtre, les traverses, les mancherons en corne de bouc… et la corde du loup-garou pour freiner.',
+      'Autrefois, on descendait le bois des forêts vosgiennes là-dessus, sur des chemins de rondins. Le schlitteur passait devant, dos à la pente, et retenait tout le chargement avec ses jambes. Un métier de casse-cou !',
+      'Toi, tu t\'assieds dedans et tu te penches pour tourner. Évite les souches et les rochers, ramasse les deniers au passage.',
+      'Les départs sont là où il y a des rondins : au bord du plateau du Hohneck, côté ouest. Elle est à toi, petit. Et le jour où tu veux me battre à la course, je t\'attends !'],
+      { ...N, onEnd: () => g.give('schlitte', () => { for (const n of g.npcs) if (n.id === 'schlitteObj') g.removeNpc(n); G.save(true); }) });
   }
   return g.say([`Pour ta schlitte, il te manque encore : ${miss.map((m) => m[1]).join(', ')}.`, P.patins ? 'Courage !' : 'Pour les patins, va voir le bûcheron de la forêt du Moûtier : il n\'y a pas meilleur que lui pour le hêtre. Mais il ne travaille jamais sans sa hache.'], N);
 };
@@ -6781,6 +6798,20 @@ MINI.games.schlitte = {
   }
 };
 const I_lean = (c) => Math.round((G.input.mx || 0) * 2);
+})();
+
+/* la schlitte neuve, posée devant la scierie */
+(() => {
+  const c = document.createElement('canvas'); c.width = 22; c.height = 14; const x = c.getContext('2d');
+  const p = (col, a, b, w, h) => { x.fillStyle = col; x.fillRect(a, b, w, h); };
+  p('#1a1216', 1, 11, 20, 3); p('#8a5a30', 2, 11, 18, 2); p('#c89a5a', 2, 11, 18, 1); // patins en hêtre
+  p('#1a1216', 0, 4, 3, 9); p('#8a5a30', 1, 5, 1, 7); p('#1a1216', 19, 7, 3, 6); p('#8a5a30', 20, 8, 1, 4); // relevés
+  for (let k = 0; k < 4; k++) { p('#1a1216', 4 + k * 4, 8, 4, 3); p('#b07a44', 5 + k * 4, 8, 2, 2); } // traverses
+  p('#1a1216', 1, 0, 3, 6); p('#e8dcc0', 2, 1, 1, 4); p('#1a1216', 4, 1, 2, 5); p('#d8ccb0', 4, 2, 1, 3); // mancherons en corne de bouc
+  p('#c8b080', 9, 6, 6, 2); p('#8a6a3a', 9, 7, 6, 1); // corde de frein enroulée
+  const fr = [c, c]; G.CRE.schlitteObj = [fr, fr, fr, fr];
+  const origTalk = G.npcTalk;
+  G.npcTalk = (n, g) => n.id === 'schlitteObj' ? g.say('Une schlitte toute neuve, qui sent encore le hêtre fraîchement raboté. Parle donc au vieux schlitteur.') : origTalk(n, g);
 })();
 
 </script>
@@ -7901,7 +7932,8 @@ G.stageAct2 = () => {
     if (!P.patins) return { id: 'b5b', vague: 'Le bûcheron saura tailler des patins… si tu lui rapportes son bien.', precise: 'Le bûcheron est dans la forêt du Moûtier, de jour. Montre-lui la hache que tu as trouvée.', target: [82, 96] };
     if (!P.corde) return { id: 'b5c', vague: 'Sur les chaumes du sabbat rôde un loup-garou. Il porte autour du cou une corde tressée.', precise: 'De nuit, sur les chaumes du Hohneck, près du sommet. Il charge tête baissée.', target: [98, 56], world: 'nuit' };
     if (!P.cornes || !P.traverses) return { id: 'b5d', vague: 'Il te manque une pièce de la schlitte, gardée dans un donjon de la nuit.', precise: P.traverses ? 'Les cornes du Bouc noir, dans le saloir de Gérardmer.' : 'Les traverses sont dans la scierie hantée.' };
-    return { id: 'b5e', vague: 'Tu as toutes les pièces. Le vieux schlitteur t\'attend.', precise: 'Retourne à la scierie de la Vologne, de jour.', target: [15, 30] };
+    if (S.q.schlitteBuild && (S.q.schlitteFish || 0) < 3) return { id: 'b5f', vague: 'Le vieux schlitteur assemble ta schlitte. Une schlitte, ça ne se fait pas en deux coups de maillet.', precise: `Va pêcher au lac de Gérardmer pour patienter : trois poissons (${S.q.schlitteFish || 0}/3).`, target: [36, 71] };
+    return { id: 'b5e', vague: S.q.schlitteBuild ? 'Ta schlitte est prête. Le vieux schlitteur t\'attend devant sa scierie.' : 'Tu as toutes les pièces. Le vieux schlitteur t\'attend.', precise: 'Retourne à la scierie de la Vologne, de jour.', target: [15, 30] };
   }
   return { id: 'b6', vague: 'Les quatre notes sont réunies. Le chemin du Diable dévale du sommet jusqu\'à sa roche.', precise: 'De nuit, au bord ouest du plateau du Hohneck, prends le départ de schlitte. La porte du Grand Tétras t\'attend en bas.', target: [83, 57], world: 'nuit' };
 };
