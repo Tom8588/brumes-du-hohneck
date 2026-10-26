@@ -6945,7 +6945,7 @@ G.floorItem = (item, x, y) => ({ kind: 'item', item, x, y, z: 0, t: 0, dead: fal
 const origCollect = g0.collectPickups;
 g0.collectPickups = function () {
   const h = this.hero;
-  for (const p of this.pickups) if (p.kind === 'item' && !p.dead && G.dist(p.x, p.y, h.x, h.y - 3) < 12) { p.dead = true; this.give(p.item); }
+  for (const p of this.pickups) if (p.kind === 'item' && !p.dead && G.dist(p.x, p.y, h.x, h.y - 3) < 12) { p.dead = true; if (p.keyId) G.S.flags[p.keyId] = 1; this.give(p.item); }
   return origCollect.call(this);
 };
 
