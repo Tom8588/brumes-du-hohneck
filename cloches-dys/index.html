@@ -7166,6 +7166,9 @@ g0.useKite = function () {
   if (!land) { G.audio.sfx('thunk'); return G.ui.toast('Pas assez de vent par là… Le cerf-volant sert à franchir un trou ou une faille.'); }
   h.state = 'kite'; h.kite = { sx: h.x, sy: h.y, tx: land[0] * T + 8, ty: land[1] * T + 10, t: 0 }; h.inv = Math.max(h.inv, 0.9); G.audio.sfx('wind');
 };
+// en plein vol, on survole les trous sans y tomber (et sans déclencher de porte)
+const origCheckTiles = g0.checkTiles;
+g0.checkTiles = function (dt) { if (this.hero && this.hero.state === 'kite') return; return origCheckTiles.call(this, dt); };
 const origHeroUpd = G.Hero.prototype.update;
 G.Hero.prototype.update = function (dt, g) {
   if (this.shovel > 0) this.shovel -= dt;
