@@ -3553,7 +3553,12 @@ G.Hero = class {
       };
       if (r.bx && Math.abs(my) < 0.3) slip('x', Math.sign(dx) * 2);
       if (r.by && Math.abs(mx) < 0.3) slip('y', Math.sign(dy) * 2);
-      for (const n of g.npcs) if (n.kind !== 'bird' && !n.follow && G.overlap(box(this), box(n))) { this.x = ox; this.y = oy; break; }
+      for (const n of g.npcs) if (n.kind !== 'bird' && !n.follow && G.overlap(box(this), box(n))) {
+        // déjà collé à un habitant (poussé par un ennemi, apparu dessus…) : on peut toujours s'en éloigner
+        const before = G.overlap({ x: ox - this.hw, y: oy - this.hh, w: this.hw * 2, h: this.hh * 2 }, box(n));
+        if (before && G.dist(this.x, this.y, n.x, n.y) >= G.dist(ox, oy, n.x, n.y)) continue;
+        this.x = ox; this.y = oy; break;
+      }
       // pousser un bloc
       const blockedCard = (r.bx && Math.abs(mx) > 0.7) || (r.by && Math.abs(my) > 0.7);
       if (blockedCard) { this.pushT += dt; if (this.pushT > 0.4) { g.tryPush(this); this.pushT = 0; } } else this.pushT = 0;
