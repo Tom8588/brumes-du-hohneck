@@ -2922,7 +2922,11 @@ const buildDungeon = (dun, D) => {
     let target = null;
     for (const m2 of Object.values(floors)) if (m2 !== m) for (const s2 of m2.stairs) if (s2.id === s.id) target = { map: m2, s: s2 };
     if (!target) { console.warn('escalier orphelin', m.id, s.id); continue; }
-    m.warps[s.y * m.w + s.x] = { to: target.map.id, x: target.s.x + 0.5, y: target.s.y + 1.6, dir: 0, stairs: 1 };
+    // on arrive sur une dalle sûre à côté de l'escalier (jamais sur un trou, de l'eau ou une passerelle du songe)
+    const t2 = target.map, safe = (x, y) => { const tt = t2.get(x, y); return tt === TL.DFLOOR || tt === TL.FLOOR || tt === TL.RUG; };
+    let ax = target.s.x, ay = target.s.y + 1, dir = 0;
+    for (const [dx, dy, d] of [[0, 1, 0], [-1, 0, 2], [1, 0, 3], [0, -1, 1], [-1, 1, 0], [1, 1, 0]]) if (safe(target.s.x + dx, target.s.y + dy)) { ax = target.s.x + dx; ay = target.s.y + dy; dir = d; break; }
+    m.warps[s.y * m.w + s.x] = { to: t2.id, x: ax + 0.5, y: ay + (ay > target.s.y ? 0.6 : 0.5), dir, stairs: 1 };
   }
   G.DUNGEONS[dun] = { ...D, id: dun, floorIds: Object.keys(D.floors).map((f) => dun + '_' + f) };
   for (const m of Object.values(floors)) G.MAPS[m.id] = m;
@@ -8662,6 +8666,23 @@ G.buildDungeons3 = (ow) => {
   origB3(ow);
   for (const dun of ['muvrella', 'cintu', 'nino', 'rotondu', 'vizza', 'coscione']) G.DUNGEONS[dun].onBoss = (g) => g.giveMany(['source', 'heartc']);
   G.DUNGEONS.orcu.onBoss = (g) => (G.endingCorse ? G.endingCorse(g) : g.ending());
+  // une fontaine dans chaque salle d'arrivée et dans chaque salle où il faut de l'eau : on n'est jamais à sec
+  for (const m of Object.values(G.MAPS)) {
+    if (!m.dungeon || !m.rooms) continue;
+    const need = new Set(), inR = (r, x, y) => x > r.x && y > r.y && x < r.x + r.w && y < r.y + r.h;
+    for (const r of m.rooms) {
+      let ok = m.start && inR(r, m.start.x, m.start.y);
+      for (const k in m.warps) { const w = m.warps[k]; if (w && w.stairs) { const t = G.MAPS[w.to]; if (t === m) continue; } }
+      for (const m2 of Object.values(G.MAPS)) if (m2.dungeon === m.dungeon) for (const k in m2.warps) { const w = m2.warps[k]; if (w && w.stairs && w.to === m.id && inR(r, w.x, w.y)) ok = true; }
+      for (let y = r.y + 1; y < r.y + r.h && !ok; y++) for (let x = r.x + 1; x < r.x + r.w; x++) { const o = m.getO(x, y); if (o === G.O.TARGET || o === G.O.FEU) { ok = true; break; } }
+      for (let y = r.y + 1; y < r.y + r.h && ok; y++) for (let x = r.x + 1; x < r.x + r.w; x++) { const t = m.get(x, y); if (G.isWater(t) && t !== TL.DTIDE || m.getO(x, y) === G.O.FUNTANA) { ok = false; break; } }
+      if (ok && m.bossRoom !== r) need.add(r);
+    }
+    for (const r of need) {
+      const C = [[r.x + 1, r.y + r.h - 1], [r.x + r.w - 1, r.y + r.h - 1], [r.x + 1, r.y + 2], [r.x + r.w - 1, r.y + 2], [r.x + 2, r.y + r.h - 1], [r.x + r.w - 2, r.y + r.h - 1]];
+      for (const [x, y] of C) { if (m.get(x, y) !== TL.DFLOOR || m.getO(x, y)) continue; const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b2]) => m.get(x + a, y + b2) === TL.DFLOOR && !m.getO(x + a, y + b2)).length; if (nb < 1) continue; m.setO(x, y, G.O.FUNTANA); if (m.static) m.static = null; break; }
+    }
+  }
 };
 })();
 
