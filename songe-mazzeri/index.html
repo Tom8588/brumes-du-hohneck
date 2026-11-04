@@ -7288,7 +7288,7 @@ const buildIsland = () => {
   }
 
   /* ---------- objets, coffres, secrets ---------- */
-  const freeNear = (x, y, r = 4, pathOk = false) => { for (let d = 0; d <= r; d++) for (let dy = -d; dy <= d; dy++) for (let dx = -d; dx <= d; dx++) { if (Math.max(Math.abs(dx), Math.abs(dy)) !== d) continue; const X = x + dx, Y = y + dy; if (!m.inb(X, Y)) continue; const i = idx(X, Y); if (!open[i] || m.solidAt(X, Y) || m.obj[i] || (!pathOk && m.pathMask[i]) || m.cl[i] || m.tiles[i] === TL.DOOR || m.inb(X, Y - 1) && m.tiles[idx(X, Y - 1)] === TL.DOOR || m.inb(X, Y - 2) && m.tiles[idx(X, Y - 2)] === TL.DOOR || m.tiles[i] === TL.WATER || m.tiles[i] === TL.SAND && dist[i] < 1) continue; let walk = 0; for (const [a, b2] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!m.solidAt(X + a, Y + b2)) walk++; if (walk < 2) continue; return [X, Y]; } return null; };
+  const freeNear = (x, y, r = 4, pathOk = false) => { for (let d = 0; d <= r; d++) for (let dy = -d; dy <= d; dy++) for (let dx = -d; dx <= d; dx++) { if (Math.max(Math.abs(dx), Math.abs(dy)) !== d) continue; const X = x + dx, Y = y + dy; if (!m.inb(X, Y)) continue; const i = idx(X, Y); if (!open[i] || m.solidAt(X, Y) || m.obj[i] || (!pathOk && m.pathMask[i]) || m.cl[i] || m.tiles[i] === TL.DOOR || m.buildings.some((bb) => bb.door[0] === X && (bb.door[1] + 1 === Y || bb.door[1] + 2 === Y)) || m.tiles[i] === TL.WATER || m.tiles[i] === TL.SAND && dist[i] < 1) continue; let walk = 0; for (const [a, b2] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!m.solidAt(X + a, Y + b2)) walk++; if (walk < 2) continue; return [X, Y]; } return null; };
   const obj = (x, y, o) => { const p = freeNear(x, y); if (p) m.setO(p[0], p[1], o); return p; };
   const chest = (x, y, item) => { const p = freeNear(x, y); if (p) { m.setO(p[0], p[1], O.CHEST); m.chest[idx(p[0], p[1])] = item; } return p; };
   // cairns tout au long du GR20
@@ -7408,6 +7408,25 @@ const buildIsland = () => {
   m.land = land;
   G.fixNpcSpots(m);
   // chaque habitant doit être joignable depuis le sentier
+  // dernière passe : chaque porte (et chaque arrivée de voyage en songe) mène au sentier, sans objet ni falaise en travers
+  { const STAIR = { [CL.FACE]: CL.STAIRF, [CL.SIDE]: CL.STAIRS, [CL.RIM]: CL.STAIRR, [CL.FALL]: CL.STAIRF }, st = (c) => c === CL.STAIRF || c === CL.STAIRS || c === CL.STAIRR;
+    const walk = (i) => { const x = i % W, y = (i / W) | 0; return m.inb(x, y) && !m.solidAt(x, y) && !G.isWater(m.tiles[i]); };
+    const linked = (a, b) => m.lv[a] === m.lv[b] || st(m.cl[a]) || st(m.cl[b]);
+    const moveable = (o) => o && o !== O.CHEST && o !== O.CHESTO && o !== O.FEU && o !== O.FORGEDOOR;
+    for (const b of m.buildings) {
+      const s0 = idx(b.door[0], b.door[1] + 1);
+      // 1. libre et relié ?
+      const seen = new Uint8Array(W * H), q = [s0]; seen[s0] = 1; let ok = false;
+      if (walk(s0)) for (let qi = 0; qi < q.length && qi < 3000; qi++) { const i = q[qi]; if (m.pathMask[i] && i !== s0 && qi > 0) { ok = true; break; } const x = i % W, y = (i / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const j = idx(x + dx, y + dy); if (!m.inb(x + dx, y + dy) || seen[j] || !walk(j) || !linked(i, j)) continue; seen[j] = 1; q.push(j); } }
+      if (ok) continue;
+      // 2. sinon on trace un passage jusqu'au sentier, en écartant objets, arbres et falaises
+      const from = new Int32Array(W * H).fill(-2), q2 = [s0]; from[s0] = -1; let goal = -1;
+      for (let qi = 0; qi < q2.length; qi++) { const i = q2[qi]; if (qi > 0 && m.pathMask[i] && walk(i)) { goal = i; break; } const x = i % W, y = (i / W) | 0; for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0], [0, -1]]) { const X = x + dx, Y = y + dy; if (!m.inb(X, Y)) continue; const j = idx(X, Y); if (from[j] !== -2 || !land[j] || gateCut[j] || m.tiles[j] === TL.BLD || m.tiles[j] === TL.DOOR || m.tiles[j] === TL.WATER || (m.obj[j] && !moveable(m.obj[j]))) continue; from[j] = i; q2.push(j); } }
+      if (goal < 0) { console.warn('porte sans issue', b.id || b.kind); continue; }
+      for (let i = from[goal]; i >= 0; i = from[i]) { if (moveable(m.obj[i])) { delete m.signs[i]; m.obj[i] = O.NONE; } if (G.tileSolid(m.tiles[i]) || m.tiles[i] === TL.GOUFFRE) m.tiles[i] = TL.PATH; if (STAIR[m.cl[i]]) m.cl[i] = STAIR[m.cl[i]]; open[i] = 1; }
+      if (m.inb(b.door[0], b.door[1] + 1) && m.cl[s0] && !st(m.cl[s0])) m.cl[s0] = STAIR[m.cl[s0]] || 0;
+    }
+  }
   { const ok = new Uint8Array(W * H), q2 = [], free = (x, y) => m.inb(x, y) && !m.solidAt(x, y) && !G.isWater(m.get(x, y));
     for (const [gx, gy] of gr) { const i = idx(gx, gy); if (free(gx, gy) && !ok[i]) { ok[i] = 1; q2.push(i); } }
     for (const [gx, gy] of branchPts) { const i = idx(gx, gy); if (free(gx, gy) && !ok[i]) { ok[i] = 1; q2.push(i); } }
@@ -7421,7 +7440,8 @@ const buildIsland = () => {
       m.obj[i] = O.NONE; if (best === null) continue; m.obj[best] = o;
       if (m.signs[i]) { m.signs[best] = m.signs[i]; delete m.signs[i]; } if (m.meta.livres && m.meta.livres[i]) { m.meta.livres[best] = m.meta.livres[i]; delete m.meta.livres[i]; }
       if (o === O.FUNTANA) m.meta.fountains = m.meta.fountains.map((p) => (p[0] === tx && p[1] === ty ? [best % W, (best / W) | 0] : p)); }
-    for (const n of m.npcs) { if (n.float || n.bird) continue; const tx = Math.floor(n.x), ty = Math.floor(n.y); if (ok[idx(tx, ty)] && !m.pathMask[idx(tx, ty)]) continue; let best = null, bd = 1e9; for (let y = ty - 8; y <= ty + 8; y++) for (let x = tx - 8; x <= tx + 8; x++) { if (!m.inb(x, y) || !ok[idx(x, y)] || m.pathMask[idx(x, y)] || m.obj[idx(x, y)]) continue; const d = (x - tx) ** 2 + (y - ty) ** 2; if (d < bd) { bd = d; best = [x, y]; } } if (best) { n.x = best[0] + 0.5; n.y = best[1] + 0.5; } }
+    const nearDoor = (x, y) => m.buildings.some((bb) => Math.abs(bb.door[0] - x) <= 1 && y - bb.door[1] >= 0 && y - bb.door[1] <= 2);
+    for (const n of m.npcs) { if (n.float || n.bird) continue; const tx = Math.floor(n.x), ty = Math.floor(n.y); if (ok[idx(tx, ty)] && !m.pathMask[idx(tx, ty)] && !nearDoor(tx, ty)) continue; let best = null, bd = 1e9; for (let y = ty - 8; y <= ty + 8; y++) for (let x = tx - 8; x <= tx + 8; x++) { if (!m.inb(x, y) || !ok[idx(x, y)] || m.pathMask[idx(x, y)] || m.obj[idx(x, y)] || nearDoor(x, y)) continue; const d = (x - tx) ** 2 + (y - ty) ** 2; if (d < bd) { bd = d; best = [x, y]; } } if (best) { n.x = best[0] + 0.5; n.y = best[1] + 0.5; } }
   }
   return m;
 };
